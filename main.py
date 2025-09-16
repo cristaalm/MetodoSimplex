@@ -6,7 +6,6 @@ from rich.align import Align
 import questionary
 
 # Metodos
-from Methods.Graphic import graphic
 from Methods.Simplex import simplex
 from Methods.BigM import big_m
 from Methods.DoublePhase import double_phase
@@ -27,7 +26,6 @@ def interactive_menu():
         show_logo()
 
         opciones = [
-            "Método Gráfico",
             "Método Simplex",
             "Método Gran M",
             "Método Dos Fases",
@@ -48,8 +46,6 @@ def interactive_menu():
         if seleccion == "Salir":
             console.print("\n👋 ¡Gracias por usar LinOpt! Hasta pronto.", style="bold green")
             break
-        elif seleccion == "Método Gráfico":
-            graphic()
         elif seleccion == "Método Simplex":
             simplex()
         elif seleccion == "Método Gran M":
