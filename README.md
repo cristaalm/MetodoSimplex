@@ -29,23 +29,26 @@ Una aplicación de consola interactiva, modular y visualmente atractiva, constru
 1. Clona el repositorio o descarga los archivos:
 
 ```bash
-git clone https://github.com/tu-usuario/LinOpt.git
-cd LinOpt
+git clone https://github.com/cristaalm/MetodoSimplex.git
+cd MetodoSimplex
 ```
 
-2. Instala las dependencias:
+2. Crea un entorno virtual (opcional pero recomendado):
+
+```bash
+python -m venv venv
+
+source venv/bin/activate  # En Linux o macOS
+venv\Scripts\activate    # En Windows
+```
+
+3. Instala las dependencias:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-💡 Si no tienes el archivo `requirements.txt`, crea uno con el contenido de tu lista de paquetes (abajo) o instala manualmente:
-
-```bash
-pip install pyfiglet rich questionary numpy matplotlib
-```
-
-3. ¡Ejecuta la aplicación!
+4. ¡Ejecuta la aplicación!
 
 ```bash
 python main.py
