@@ -1,174 +1,399 @@
-# metodo_gran_m.py
+import questionary
 from rich.console import Console
 from rich.table import Table
-from rich.text import Text
+from copy import deepcopy
 from pyfiglet import Figlet
 
 console = Console()
 
-def show_simplex_table(tabla, iteracion=1, variables_basicas=None, titulo="Tabla Simplex"):
-    """Muestra una tabla del método Simplex con formato profesional."""
-    console.print(f"\n[bold underline]📊 {titulo} - Iteración {iteracion}[/bold underline]\n")
+# Función para imprimir una tabla simplex y esperar a que el usuario presione enter
+def print_table(headers, rows, title="Tabla Simplex"):
+    table = Table(title=title)
 
-    tabla_rich = Table(
-        title=titulo,
-        title_style="bold magenta",
-        border_style="blue",
-        header_style="bold cyan on black",
-        row_styles=["", "dim"],
-        show_lines=True
-    )
+    # Primera columna fija: "VB" (Variable Básica)
+    table.add_column("VB", justify="center", style="bold cyan")
 
-    if not variables_basicas:
-        # Generar nombres genéricos si no se pasan
-        variables_basicas = ["VB"] + [f"x{i}" for i in range(1, len(tabla[0]))]
+    # Luego, las cabeceras reales (variables + R)
+    for header in headers:
+        table.add_column(header, justify="center")
 
-    for var in variables_basicas:
-        tabla_rich.add_column(var, justify="center", style="green")
+    # Ahora, cada fila: primer elemento es la VB, el resto son los valores
+    for row in rows:
+        # row[0] = nombre de la variable básica ("Z", "x1", etc.)
+        # row[1:] = valores numéricos alineados con las cabeceras
+        table.add_row(row[0], *[str(cell) for cell in row[1:]])
 
-    nombres_filas = ["Z"] + [f"A{i}" if i > 0 else "Z" for i in range(len(tabla) - 1)]
-    for i, fila in enumerate(tabla):
-        estilo_fila = "bold yellow on black" if i == 1 else None  # resaltar primera restricción como ejemplo
-        celdas = [nombres_filas[i]] + [f"{x:.4g}" if isinstance(x, float) else str(x) for x in fila]
-        tabla_rich.add_row(*celdas, style=estilo_fila)
+    console.print(table)
 
-    console.print(tabla_rich)
-    console.print("")
+    # agregamos el que significa a, e y s
+    console.print("\n")
+    console.print("[bold]Significado de las variables:[/bold]")
+    console.print("a: artificial")
+    console.print("e: exceso")
+    console.print("s: holgura")
 
+    console.print("[dim]Presione ENTER para continuar...[/dim]")
+    input()
+
+# Función para encontrar la columna pivote (máximo coeficiente negativo en Z, para maximización)
+def find_pivot_column(tableau, var_names, is_maximize):
+    z_row = tableau[0][:-1]
+    candidates = []
+
+    for j in range(len(z_row)):
+        vn = var_names[j]
+        if vn.startswith('a'):  # Ignorar artificiales y exceso
+            continue
+        candidates.append((z_row[j], j))
+
+    if not candidates:
+        return -1
+
+    if is_maximize:
+        min_val, min_col = min(candidates, key=lambda x: x[0])
+        if min_val >= -1e-8:
+            return -1
+        return min_col
+    else:
+        max_val, max_col = max(candidates, key=lambda x: x[0])
+        if max_val <= 1e-8:
+            return -1
+        return max_col
+
+def format_restriccion(coeficientes, tipo, r, n_vars):
+    partes = []
+    for i in range(n_vars):
+        c = coeficientes[i]
+        if c == 0:
+            continue
+        # Mostrar sin decimales si es entero
+        if c == int(c):
+            c_str = str(int(c))
+        else:
+            c_str = f"{c:.4f}".rstrip('0').rstrip('.')  # Elimina ceros innecesarios
+
+        var = f"x{i+1}"
+        if c == 1:
+            partes.append(f"+ {var}" if partes else var)
+        elif c == -1:
+            partes.append(f"- {var}")
+        elif c > 0:
+            partes.append(f"+ {c_str}{var}" if partes else f"{c_str}{var}")
+        else:  # c < 0
+            partes.append(f"- {abs(float(c_str))}{var}")
+
+    # Si no hay términos, poner 0
+    if not partes:
+        partes = ["0"]
+
+    # Formatear R
+    if r == int(r):
+        r_str = str(int(r))
+    else:
+        r_str = f"{r:.4f}".rstrip('0').rstrip('.')
+
+    return f"{' '.join(partes)} {tipo} {r_str}"
+
+def format_expression(coeficientes, n_vars, is_objective=False):
+    """
+    Formatea una expresión matemática (objetivo o restricción) de forma legible.
+    Ej: [4, 1] → "4x₁ + x₂"
+    """
+    partes = []
+    for i in range(n_vars):
+        c = coeficientes[i]
+        if c == 0:
+            continue
+
+        # Mostrar enteros sin decimales
+        if isinstance(c, float) and c.is_integer():
+            c_display = int(c)
+        else:
+            c_display = c
+
+        # Formato del número
+        if isinstance(c_display, float):
+            c_str = f"{c_display:.6f}".rstrip('0').rstrip('.')
+        else:
+            c_str = str(c_display)
+
+        var = f"x{i+1}"
+
+        if c > 0:
+            if c == 1 and not is_objective:
+                term = f"+ {var}" if partes else var
+            elif c == 1:
+                term = f"{var}" if not partes else f"+ {var}"
+            else:
+                term = f"+ {c_str}{var}" if partes else f"{c_str}{var}"
+        else:  # c < 0
+            abs_c = abs(c_display)
+            if abs_c == 1:
+                term = f"- {var}"
+            else:
+                term = f"- {abs_c}{var}" if isinstance(abs_c, int) else f"- {abs_c:.6f}".rstrip('0').rstrip('.') + f"{var}"
+        partes.append(term)
+
+    if not partes:
+        return "0"
+
+    return ' '.join(partes)
+
+# Función para encontrar la fila pivote (mínima razón no negativa)
+def find_pivot_row(tableau, pivot_col):
+    ratios = []
+    for i in range(1, len(tableau)):
+        if tableau[i][pivot_col] > 0:
+            ratio = tableau[i][-1] / tableau[i][pivot_col]
+            ratios.append((ratio, i))
+        else:
+            ratios.append((float('inf'), i))
+    if not ratios or all(r[0] == float('inf') for r in ratios):
+        return -1  # Problema no acotado
+    min_ratio = min(ratios, key=lambda x: x[0])
+    return min_ratio[1]
+
+# Función para realizar la operación de pivoteo
+def pivot(tableau, pivot_row, pivot_col):
+    # Hacer 1 el elemento pivote
+    divisor = tableau[pivot_row][pivot_col]
+    for j in range(len(tableau[pivot_row])):
+        tableau[pivot_row][j] /= divisor
+
+    # Hacer 0 los demás elementos de la columna pivote
+    for i in range(len(tableau)):
+        if i != pivot_row:
+            factor = tableau[i][pivot_col]
+            for j in range(len(tableau[i])):
+                tableau[i][j] -= factor * tableau[pivot_row][j]
+
+# Función principal del método Big M
 def big_m():
     console.clear()
     f = Figlet(font='big')
-    console.print(f.renderText('Metodo Gran M'), style="bold blue")
-    console.print("Este método resuelve problemas de PL agregando variables artificiales muy grandes.", style="italic")
+    console.print(f.renderText('Metodo Big M'), style="bold blue")
+    console.print("[bold green]🚀 Método Big M para Programación Lineal[/bold green]\n")
 
+    # Preguntar objetivo
+    objetivo = questionary.select(
+        "¿Qué deseas hacer?",
+        choices=["Maximizar", "Minimizar"]
+    ).ask()
 
-    ## LOGICA DEL METODO ##
+    is_maximize = objetivo == "Maximizar"
 
-    # 1. Pedir función objetivo y restricciones (como en Simplex).
-    # 2. Identificar restricciones que requieren variables artificiales (>= o =).
-    # 3. Modificar la función objetivo:
-    #    - Agregar términos "+ M * A_i" para cada variable artificial A_i (si es minimización).
-    #    - O "- M * A_i" si es maximización.
-    # 4. Construir tabla inicial incluyendo columnas de artificiales.
-    # 5. Reescribir la fila Z eliminando las variables artificiales de la ecuación Z:
-    #    - Sustituir A_i usando sus ecuaciones de restricción.
-    #    - Esto genera coeficientes con "M" en la fila Z.
-    # 6. Mostrar tabla inicial.
-    # 7. Aplicar Simplex normal, tratando "M" como un número muy grande (simulado, ej. M=1000).
-    # 8. En cada iteración:
-    #    - Elegir columna pivote considerando términos con M primero.
-    #    - Actualizar toda la tabla (incluyendo fila Z).
-    #    - Mostrar tabla actualizada.
-    # 9. Detenerse cuando:
-    #    - No haya coeficientes negativos en Z (para max) y
-    #    - Todas las variables artificiales estén fuera de la base o tengan valor 0.
-    # 10. Si alguna artificial sigue en la base con valor > 0 → problema infactible.
-    # 11. Mostrar solución óptima del problema original (ignorando artificiales).
+    # Número de variables
+    n_vars = int(questionary.text("Número de variables de decisión:").ask())
 
+    # Coeficientes de la función objetivo
+    coef_obj = []
+    coef_obj_original = []
+    for i in range(n_vars):
+        coef = float(questionary.text(f"Coeficiente de x{i+1} en Z:").ask())
+        coef_obj_original.append(coef) 
+        coef_obj.append(coef if is_maximize else -coef)  # Convertimos si es minimizar
+    
+    console.print(f"[bold green]→ {'Maximizar' if is_maximize else 'Minimizar'} Z = {format_expression(coef_obj_original, n_vars, is_objective=True)}[/bold green] \n")
 
-    # =============================================
-    # 🧑🏻  Problema de ejemplo
-    # =============================================
+    # Número de restricciones
+    n_restricciones = int(questionary.text("Número de restricciones:").ask())
 
-    console.print("\n[bold blue]📌 Problema de ejemplo:[/bold blue]")
-    console.print("Min Z = 2x₁ + 3x₂")
-    console.print("Sujeto a:")
-    console.print("  0.5x₁ + 0.25x₂ ≤ 4")
-    console.print("  x₁ + 3x₂ ≥ 20")
-    console.print("  x₁ + x₂ = 10")
-    console.print("  x₁, x₂ ≥ 0")
+    restricciones = []
+    tipos = []
+    r = []
 
-    console.print("\n[bold yellow]🛠️  Paso 1: Convertir a forma estándar y agregar variables artificiales[/bold yellow]")
-    console.print("→ Restricción 2 (≥): restamos exceso (e₂) y sumamos artificial (A₂)")
-    console.print("→ Restricción 3 (=): sumamos artificial (A₃)")
-    console.print("→ Función objetivo: Penalizamos artificiales con M (M >>> 0)")
+    for i in range(n_restricciones):
+        console.print(f"\n[bold]Restricción {i+1}[/bold]")
+        coef_restriccion = []
+        for j in range(n_vars):
+            c = float(questionary.text(f"Coeficiente de x{j+1}:").ask())
+            coef_restriccion.append(c)
+        tipo = questionary.select(
+            "Tipo de restricción:",
+            choices=["≤", "≥", "="]
+        ).ask()
+        b = float(questionary.text("Valor del lado derecho (R):").ask())
+        
+        restriccion_str = format_restriccion(coef_restriccion, tipo, b, n_vars)
+        console.print(f"[green]→ {restriccion_str}[/green]")
 
-    console.print("\n[bold green]Nueva F.O.: Z = 2x₁ + 3x₂ + 0e₂ + MA₂ + MA₃[/bold green]")
+        restricciones.append(coef_restriccion)
+        tipos.append(tipo)
+        r.append(b)
 
-    console.input("\n[bold cyan]➡️  Presiona Enter para ver la tabla inicial...[/bold cyan]")
+    # MOSTRAR RESUMEN DEL PROBLEMA
+    console.print("\n" + "═" * 60)
+    console.print(f"[bold blue]📋 PROBLEMA INGRESADO[/bold blue]")
+    console.print("═" * 60)
 
-    # =============================================
-    # 🧮 Tabla Inicial del Método Gran M
-    # Variables: [x1, x2, e2, A2, A3, LD]
-    # Filas: Z, h1, A2, A3
-    # =============================================
+    # Función objetivo
+    obj_expr = format_expression(coef_obj_original, n_vars, is_objective=True)
+    console.print(f"[bold green]{'Maximizar' if is_maximize else 'Minimizar'} Z = {obj_expr}[/bold green]")
 
-    # Coeficientes iniciales (M se mantiene simbólico, pero en cálculo numérico usamos un valor grande, ej. M=1000)
-    M = 1000  # Valor grande para simular M
+    # Restricciones
+    console.print(f"\n[bold]Restricciones:[/bold]")
+    for i in range(n_restricciones):
+        restr_expr = format_expression(restricciones[i], n_vars)
+        console.print(f" {restr_expr} {tipos[i]} {int(r[i]) if r[i].is_integer() else r[i]:.6f}".rstrip('0').rstrip('.'))
+    
+    console.print("═" * 60 + "\n")
 
-    # Tabla inicial: fila Z se calcula como: coeficientes - (suma de M * fila artificial)
-    # Z = 2x1 + 3x2 + 0e2 + M*A2 + M*A3
-    # Pero en la tabla, la fila Z se ajusta restando M veces las filas de A2 y A3.
+    # Construir la tabla inicial (tableau)
+    # Variables: x1, x2, ..., xn, s1, s2, ..., a1, a2, ...
+    M = 1e6  # Valor grande para Big M
 
-    # Ecuaciones:
-    # h1: 0.5x1 + 0.25x2 + h1 = 4
-    # A2: x1 + 3x2 - e2 + A2 = 20
-    # A3: x1 + x2 + A3 = 10
+    # Contar variables de holgura, exceso y artificiales
+    n_holgura = 0
+    n_exceso = 0
+    n_artificial = 0
 
-    # Fila Z inicial (antes de eliminar M de VB):
-    # Z - 2x1 - 3x2 - 0e2 - M A2 - M A3 = 0
-    # Sustituimos A2 y A3 usando sus ecuaciones → nueva Z:
+    var_names = [f"x{i+1}" for i in range(n_vars)]
+    basic_vars = []  # Variables básicas actuales
 
-    # Nueva Z = (2 - 2M)x1 + (3 - 4M)x2 + M e2 + 0h1 + 0A2 + 0A3 + 30M
+    # Primera pasada: contar variables a añadir
+    for tipo in tipos:
+        if tipo == "≤":
+            n_holgura += 1
+        elif tipo == "≥":
+            n_exceso += 1
+            n_artificial += 1
+        elif tipo == "=":
+            n_artificial += 1
 
-    tabla_inicial = [
-        [1, 2 - 2*M, 3 - 4*M, M, 0, 0, 30*M],  # Z (coeficientes actualizados)
-        [0, 0.5, 0.25, 0, 1, 0, 4],           # h1
-        [0, 1, 3, -1, 0, 1, 20],              # A2
-        [0, 1, 1, 0, 0, 1, 10]                # A3
-    ]
+    # Añadir nombres de variables
+    for i in range(n_holgura):
+        var_names.append(f"s{i+1}")
+    for i in range(n_exceso):
+        var_names.append(f"e{i+1}")
+    for i in range(n_artificial):
+        var_names.append(f"a{i+1}")
 
-    vars_iniciales = ["VB", "x₁", "x₂", "e₂", "h₁", "A₂", "A₃", "LD"]
-    show_simplex_table(tabla_inicial, iteracion=1, variables_basicas=vars_iniciales, titulo="Tabla Inicial - Gran M")
+    # Construir el tableau
+    n_total_vars = len(var_names)
+    n_rows = n_restricciones + 1  # +1 para la fila Z
+    tableau = [[0.0] * (n_total_vars + 1) for _ in range(n_rows)]  # +1 para R
 
-    console.input("\n[bold cyan]➡️  Presiona Enter para la siguiente iteración...[/bold cyan]")
+    # Llenar fila Z original: coeficientes de -Z (porque en tableau se escribe Z - c1x1 - c2x2 ... = 0)
+    # Recordar: si es minimización, convertimos a maximizar -Z, así que los coeficientes en Z son los originales
+    for i in range(n_vars):
+        tableau[0][i] = -coef_obj[i]   # ¡OJO! Aquí va el coeficiente tal cual para -Z
 
-    # =============================================
-    # 🔄 Iteración 1: Entra x2 (coeficiente más negativo en Z: 3-4M ≈ -3997)
-    # Sale A2 (mínimo {4/0.25=16, 20/3≈6.67, 10/1=10} → A2)
-    # =============================================
+    # Variables de holgura/exceso/artificiales empiezan en 0 en la fila Z (por ahora)
+    # Llenar restricciones y definir variables básicas
+    slack_idx = n_vars
+    excess_idx = n_vars + n_holgura
+    artificial_idx = n_vars + n_holgura + n_exceso
 
-    # Pivote: fila A2, columna x2 → elemento pivote = 3
-    # Nueva fila x2 = fila A2 / 3
-    # Actualizar otras filas
+    slack_counter = 0
+    excess_counter = 0
+    artificial_counter = 0
 
-    tabla_iter_2 = [
-        [1, 1 - M/3, 0, M/3 - 1, 0, (4*M)/3 - 1, (80*M)/3 - 20],  # Z actualizada
-        [0, 5/12, 0, 1/12, 1, -1/12, 7/3],                         # h1
-        [0, 1/3, 1, -1/3, 0, 1/3, 20/3],                           # x2 (antes A2)
-        [0, 2/3, 0, 1/3, 0, -1/3, 10/3]                            # A3
-    ]
+    for i in range(n_restricciones):
+        # Copiar coeficientes de variables de decisión
+        for j in range(n_vars):
+            tableau[i+1][j] = restricciones[i][j]
 
-    vars_iter_2 = ["VB", "x₁", "x₂", "e₂", "h₁", "A₂", "A₃", "LD"]
-    show_simplex_table(tabla_iter_2, iteracion=2, variables_basicas=vars_iter_2, titulo="Iteración 1 - Gran M")
+        # Añadir variables según tipo
+        if tipos[i] == "≤":
+            tableau[i+1][slack_idx + slack_counter] = 1.0
+            basic_vars.append(f"s{slack_counter+1}")
+            slack_counter += 1
+        elif tipos[i] == "≥":
+            tableau[i+1][excess_idx + excess_counter] = -1.0
+            tableau[i+1][artificial_idx + artificial_counter] = 1.0
+            basic_vars.append(f"a{artificial_counter+1}")
+            excess_counter += 1
+            artificial_counter += 1
+        elif tipos[i] == "=":
+            tableau[i+1][artificial_idx + artificial_counter] = 1.0
+            basic_vars.append(f"a{artificial_counter+1}")
+            artificial_counter += 1
 
-    console.input("\n[bold cyan]➡️  Presiona Enter para la iteración final...[/bold cyan]")
+        # R
+        tableau[i+1][-1] = r[i]
 
-    # =============================================
-    # 🔄 Iteración 2: Entra x1 (coeficiente 1 - M/3 ≈ -332.33)
-    # Sale A3 (mínimo { (7/3)/(5/12)=5.6, (20/3)/(1/3)=20, (10/3)/(2/3)=5 } → A3)
-    # =============================================
+    # Por cada restricción con variable artificial, RESTAMOS M * (esa fila) de la fila Z
+    # Porque: Z = original - M * (suma de artificiales), y artificial = R - ... → sustituimos
 
-    # Pivote: fila A3, columna x1 → pivote = 2/3
-    # Nueva fila x1 = fila A3 / (2/3) = fila A3 * 3/2
+    for i in range(n_restricciones):
+        if tipos[i] in ["≥", "="]:
+            # Encontrar la columna de la variable artificial en esta fila
+            found = False
+            for a_col in range(artificial_idx, n_total_vars):
+                if abs(tableau[i+1][a_col] - 1.0) < 1e-8:  # Encontramos la artificial
+                    # Restamos M veces esta fila entera de la fila Z
+                    for j in range(n_total_vars + 1):
+                        tableau[0][j] -= M * tableau[i+1][j]
+                    found = True
+                    break
+            if not found:
+                console.print(f"[red]❌ No se encontró variable artificial en restricción {i+1}[/red]")
 
-    tabla_final = [
-        [1, 0, 0, -0.5, 0, M - 0.5, M + 25],   # Z final (¡óptima si no hay M en Z y todos coef >=0!)
-        [0, 0, 0, -0.25, 1, 0.25, 0.5],        # h1
-        [0, 0, 1, -0.5, 0, 0.5, 5],            # x2
-        [0, 1, 0, 0.5, 0, -0.5, 5]             # x1
-    ]
+    # Mostrar tabla inicial
+    console.print(f"\n[bold cyan]Tabla Inicial (Big M)[/bold cyan]")
+    headers = var_names + ["R"]
+    rows = []
+    for i in range(1, len(tableau)):
+        rows.append([basic_vars[i-1]] + [f"{val:.4f}" for val in tableau[i]])
+    rows.append(["Z"] + [f"{val:.4f}" for val in tableau[0]])
+    print_table(headers, rows, "Iteración 0")
 
-    vars_final = ["VB", "x₁", "x₂", "e₂", "h₁", "A₂", "A₃", "LD"]
-    show_simplex_table(tabla_final, iteracion="FINAL", variables_basicas=vars_final, titulo="Tabla Final - Gran M")
+    iteracion = 1
+    while True:
+        # Encontrar columna pivote
+        pivot_col = find_pivot_column(tableau, var_names, True)  # Siempre maximizando internamente
+        if pivot_col == -1:
+            console.print("\n[green bold]✅ ¡Solución óptima encontrada![/green bold]")
+            break
 
-    console.print("\n[bold red]⚠️  ATENCIÓN: La tabla final aún tiene coeficientes con M en la fila Z.[/bold red]")
-    console.print("[bold yellow]Esto indica que las variables artificiales aún están en la base o no se eliminaron correctamente.[/bold yellow]")
-    console.print("[bold green]✅ En un caso real, deberías continuar hasta que todas las A tengan coeficiente ≥ 0 en Z y no estén en VB.[/bold green]")
+        # Encontrar fila pivote
+        pivot_row = find_pivot_row(tableau, pivot_col)
+        if pivot_row == -1:
+            console.print("\n[red bold]❌ Problema no acotado[/red bold]")
+            return
 
-    console.print("\n[bold green]🔍 Solución actual (no óptima aún):[/bold green]")
-    console.print("x₁ = 5, x₂ = 5, Z = M + 25 (¡no válida por M!)")
+        # Actualizar variable básica
+        entering_var = var_names[pivot_col]
+        leaving_var = basic_vars[pivot_row - 1]
+        basic_vars[pivot_row - 1] = entering_var
 
-    console.print("\n[bold blue]💡 Nota: Este ejemplo es ilustrativo. En la práctica, debes iterar hasta eliminar M de la base y tener coeficientes no negativos en Z.[/bold blue]")
+        console.print(f"\n[bold yellow]Iteración {iteracion}[/bold yellow]")
+        console.print(f"Variable entrante: {entering_var}, Variable saliente: {leaving_var}, Elemento pivote: ({pivot_row}, {pivot_col})")
 
-    console.input("\n[bold cyan]Presiona Enter para volver al menú...[/bold cyan]")
+        # Pivoteo
+        pivot(tableau, pivot_row, pivot_col)
+
+        # Mostrar tabla actual
+        rows = []
+        for i in range(1, len(tableau)):
+            rows.append([basic_vars[i-1]] + [f"{val:.4f}" for val in tableau[i]])
+        rows.append(["Z"] + [f"{val:.4f}" for val in tableau[0]])
+        print_table(headers, rows, f"Iteración {iteracion}")
+
+        iteracion += 1
+        
+    # Mostrar solución
+    # Verificar si hay variables artificiales en la solución final con valor > 0 (infactibilidad)
+    for i, bv in enumerate(basic_vars):
+        if bv.startswith('a') and abs(tableau[i+1][-1]) > 1e-5:
+            console.print("\n[red bold]❌ SOLUCIÓN INFACTIBLE: Variable artificial en base con valor positivo.[/red bold]")
+            return
+
+    console.print("\n[bold green]📈 SOLUCIÓN ÓPTIMA[/bold green]")
+    solution = {var: 0.0 for var in var_names}
+    for i in range(len(basic_vars)):
+        solution[basic_vars[i]] = tableau[i+1][-1]
+
+    console.print("Valores de las variables:")
+    for var in var_names[:n_vars]:  # Solo variables de decisión originales
+        console.print(f"  {var} = {solution[var]:.4f}")
+
+    optimal_value = tableau[0][-1] if is_maximize else -tableau[0][-1]
+    console.print(f"\n[bold]Valor óptimo de Z: {optimal_value:.4f}[/bold]")
+    console.print("Presione ENTER para continuar...")
+    input()
+
+    # Verificar si hay variables artificiales en la solución con valor > 0
+    for i in range(n_vars + n_holgura + n_exceso, n_total_vars):
+        if solution[var_names[i]] > 1e-5:
+            console.print("[red]⚠️  ATENCIÓN: Variable artificial en solución final. El problema original es infactible.[/red]")
