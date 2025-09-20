@@ -1,6 +1,6 @@
 # 📊 LinOpt — Optimización Lineal en Terminal 🧮
 
-Resuelve problemas de **Programación Lineal** con métodos **Simplex**, **Gran M** y **Dos Fases** — todo desde tu terminal.  
+Resuelve problemas de **Programación Lineal** con métodos **Grafico**, **Simplex** y **Gran M** — todo desde tu terminal.  
 
 Una aplicación de consola interactiva, modular y visualmente atractiva, construida en **Python**, ideal para estudiantes, profesores o profesionales que necesitan resolver problemas de PL paso a paso con tablas y explicaciones claras.
 
@@ -11,9 +11,9 @@ Una aplicación de consola interactiva, modular y visualmente atractiva, constru
 - ✅ Logo ASCII impactante al inicio (**pyfiglet**).
 - ✅ Tablas profesionales y coloreadas en terminal (**rich**).
 - ✅ Tres métodos implementados:
+  - **Grafico** (para problemas con 2 variables).
   - **Simplex Estándar** (para problemas con solo ≤).
   - **Método de la Gran M** (para problemas con ≥ o =).
-  - **Método de las Dos Fases** (alternativa profesional a la Gran M).
 - ✅ Código modular y comentado — ideal para trabajo en equipo.
 - ✅ Compatible con **Linux**, **macOS** y **Windows**.
 
@@ -75,9 +75,9 @@ Luego, un menú interactivo:
 
 ```
 👉 Elige un método para resolver tu problema:
+     Método Grafico
 ➡️   Método Simplex
      Método Gran M
-     Método Dos Fases
      Salir
 ```
 
@@ -102,7 +102,7 @@ LinOpt/
 └── Methods/
     ├── Simplex.py           # Método Simplex estándar
     ├── BigM.py              # Método de la Gran M
-    └── DoublePhase.py       # Método de las Dos Fases
+    └── Graphic.py       # Método de las Dos Fases
 ```
 
 ---
@@ -125,7 +125,7 @@ LinOpt/
 👉 Elige un método para resolver tu problema:
 ➡️   Método Simplex
      Método Gran M
-     Método Dos Fases
+     Método Grafico
      Salir
 ```
 
