@@ -75,12 +75,10 @@ def metodo_grafico():
             ).ask())
 
             restricciones.append([a1, a2, b, op])
-            restricciones.append([0, 1, 0, '>='])
-            restricciones.append([0, 1, 0, '>='])
             console.print(f"Restricción {i+1}: {a1}X1 + {a2}X2 {op} {b}")
 
 
-        """# 4.1 Preguntar por restricciones de no negatividad
+        # 4.1 Preguntar por restricciones de no negatividad
         console.print(f"\n[bold yellow]📌 RESTRICCIONES DE NO NEGATIVIDAD[/bold yellow]")
         agregar_x1_no_neg = questionary.confirm("¿Deseas agregar la restricción X1 >= 0 (No negatividad)?").ask()
         agregar_x2_no_neg = questionary.confirm("¿Deseas agregar la restricción X2 >= 0 (No negatividad)?").ask()
@@ -91,7 +89,7 @@ def metodo_grafico():
 
         if agregar_x2_no_neg:
             restricciones.append([0, 1, 0, '>='])
-            console.print("✅ Se agregó: X2 >= 0")"""
+            console.print("✅ Se agregó: X2 >= 0")
 
         console.print(f"\n[bold green]🚀 RESOLVIENDO PROBLEMA...[/bold green]")
         console.input("Presiona Enter para comenzar...")
