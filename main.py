@@ -43,7 +43,7 @@ def interactive_menu():
             ])
         ).ask()
 
-        if seleccion == "Salir":
+        if seleccion == "Salir" or seleccion == None:
             console.print("\n👋 ¡Gracias por usar LinOpt! Hasta pronto.", style="bold green")
             break
         elif seleccion == "Método Gráfico":
