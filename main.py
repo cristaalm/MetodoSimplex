@@ -28,7 +28,7 @@ def interactive_menu():
         opciones = [
             "Método Gráfico",
             "Método Simplex",
-            "Método Dos Fases",
+            "Método Gran M",
             "Salir"
         ]
 
@@ -51,7 +51,7 @@ def interactive_menu():
         elif seleccion == "Método Simplex":
             simplex()
         elif seleccion == "Método Gran M":
-            metodo_grafico()
+            big_m()
 
 if __name__ == "__main__":
     try:
